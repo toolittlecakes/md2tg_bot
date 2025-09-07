@@ -22,4 +22,4 @@ async def start_command(message: Message):
 @router.message()
 async def message_handler(message: Message):
 
-    await message.answer(markdownify(message.md_text or ""), parse_mode=ParseMode.MARKDOWN_V2)
+    await message.answer(markdownify(message.html_text or ""), parse_mode=ParseMode.MARKDOWN_V2)
