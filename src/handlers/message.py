@@ -21,7 +21,6 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 customize.get_runtime_config().cite_expandable = False
-customize.get_runtime_config()._strict_markdown = True
 customize.get_runtime_config()._markdown_symbol.task_uncompleted = "◻"
 customize.get_runtime_config()._markdown_symbol.task_completed = "✔"
 
@@ -43,6 +42,26 @@ def _extract_full_pre_entity_text(message: Message) -> str | None:
     if entity.offset == 0 and extracted == message.text:
         return extracted
     return None
+
+
+async def _send_telegramified_messages(message: Message, markdown_content: str) -> None:
+    """Send a list of telegramified messages to the user."""
+    telegram_content = markdownify(markdown_content)
+    print(telegram_content)
+    await message.answer(telegram_content, parse_mode=ParseMode.MARKDOWN_V2)
+
+
+async def _handle_markdown_processing_error(
+    message: Message, error: Exception, context: str
+) -> None:
+    """Handle errors that occur during markdown processing."""
+    logger.error(f"Error processing {context}: {error}")
+    await message.answer(
+        markdownify(
+            "❌ Произошла ошибка при обработке. Убедитесь, что содержимое корректно в кодировке UTF-8."
+        ),
+        parse_mode=ParseMode.MARKDOWN_V2,
+    )
 
 
 @router.message(CommandStart())
@@ -71,62 +90,39 @@ async def document_handler(message: Message):
         )
         return
 
-    try:
-        # Download the file
-        bot = message.bot
-        if not bot:
-            return
+    # Download the file
+    bot = message.bot
+    if not bot:
+        return
 
-        file_info = await bot.get_file(document.file_id)
-        if not file_info.file_path:
-            await message.answer(
-                markdownify("❌ Не удалось получить информацию о файле"),
-                parse_mode=ParseMode.MARKDOWN_V2,
-            )
-            return
-
-        # Create a temporary file to store the downloaded content
-        io_bytes = await bot.download_file(file_info.file_path)
-        if not io_bytes:
-            return
-
-        # Read the markdown content
-        with io_bytes as file:
-            markdown_content = file.read().decode("utf-8")
-
-        if not markdown_content.strip():
-            await message.answer(
-                markdownify("❌ Файл пустой или не содержит текста"),
-                parse_mode=ParseMode.MARKDOWN_V2,
-            )
-            return
-
-        # Convert markdown to Telegram format
-        messages = await telegramify(markdown_content)
-        for m in messages:
-            if isinstance(m, Text):
-                await message.answer(m.content, parse_mode=ParseMode.MARKDOWN_V2)
-            elif isinstance(m, File):
-                await message.answer_document(
-                    BufferedInputFile(m.file_data, filename=m.file_name),
-                    caption=m.caption,
-                )
-            elif isinstance(m, Photo):
-                await message.answer_photo(
-                    BufferedInputFile(m.file_data, filename=m.file_name),
-                    caption=m.caption,
-                )
-
-        logger.info(f"Successfully processed markdown file: {document.file_name}")
-
-    except Exception as e:
-        logger.error(f"Error processing file {document.file_name}: {e}")
+    file_info = await bot.get_file(document.file_id)
+    if not file_info.file_path:
         await message.answer(
-            markdownify(
-                "❌ Произошла ошибка при обработке файла. Убедитесь, что файл содержит корректный текст в кодировке UTF-8."
-            ),
+            markdownify("❌ Не удалось получить информацию о файле"),
             parse_mode=ParseMode.MARKDOWN_V2,
         )
+        return
+
+    # Create a temporary file to store the downloaded content
+    io_bytes = await bot.download_file(file_info.file_path)
+    if not io_bytes:
+        return
+
+    # Read the markdown content
+    with io_bytes as file:
+        markdown_content = file.read().decode("utf-8")
+
+    if not markdown_content.strip():
+        await message.answer(
+            markdownify("❌ Файл пустой или не содержит текста"),
+            parse_mode=ParseMode.MARKDOWN_V2,
+        )
+        return
+
+    # Convert markdown to Telegram format
+    await _send_telegramified_messages(message, markdown_content)
+
+    logger.info(f"Successfully processed markdown file: {document.file_name}")
 
 
 @router.message(F.text)
@@ -140,37 +136,5 @@ async def codeblock_text_handler(message: Message):
         )
         return
 
-    try:
-        messages = await telegramify(inner_markdown)
-        for m in messages:
-            if isinstance(m, Text):
-                await message.answer(m.content, parse_mode=ParseMode.MARKDOWN_V2)
-            elif isinstance(m, File):
-                await message.answer_document(
-                    BufferedInputFile(m.file_data, filename=m.file_name),
-                    caption=m.caption,
-                )
-            elif isinstance(m, Photo):
-                await message.answer_photo(
-                    BufferedInputFile(m.file_data, filename=m.file_name),
-                    caption=m.caption,
-                )
-
-        logger.info("Successfully processed markdown from code entity text message")
-
-    except Exception as e:
-        logger.error(f"Error processing code entity text: {e}")
-        await message.answer(
-            markdownify(
-                "❌ Произошла ошибка при обработке сообщения. Убедитесь, что кодовый блок содержит корректный текст в кодировке UTF-8."
-            ),
-            parse_mode=ParseMode.MARKDOWN_V2,
-        )
-
-
-# @router.message()
-# async def unsupported_message_handler(message: Message):
-#     """Handle all other messages (text, photos, etc.)"""
-#     await message.answer(
-#         markdownify(Lexicon.UNSUPPORTED_MESSAGE), parse_mode=ParseMode.MARKDOWN_V2
-#     )
+    await _send_telegramified_messages(message, inner_markdown)
+    logger.info("Successfully processed markdown from code entity text message")

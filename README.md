@@ -39,19 +39,11 @@ We will remove the \ symbol from the original text.
 
 *italic text*
 
-_italic text_
-
-__underline__
-
-~no valid strikethrough~
-
 ~~strikethrough~~
 
 ||spoiler||
 
-**bold *italic_bold ~~italic_bold_strikethrough ||italic_bold_strikethrough_spoiler||~~ __underline_italic_bold__ italic_bold* bold**
-
-__underline italic bold__
+**bold *italic_bold ~~italic_bold_strikethrough ||italic_bold_strikethrough_spoiler||~~ italic_bold* bold**
 
 [link](https://www.google.com)
 

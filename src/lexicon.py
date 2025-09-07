@@ -2,13 +2,24 @@ class Lexicon:
     START_MESSAGE = """
 🤖 **Telegram Markdown Converter Bot**
 
-Загрузите файл в формате markdown (расширение .md, .markdown или .txt), и я конвертирую его в формат, поддерживаемый Telegram.
+Загрузите файл в формате markdown (расширение .md, .markdown или .txt), и я конвертирую его в Telegram сообщение. Также можно отправлять текст в формате кода:
 
-📎 **Как использовать:**
-1. Прикрепите файл с markdown-разметкой
-2. Получите готовый текст для Telegram
+```
+# Header
+**bold** *italic* ~~strikethrough~~ ||spoiler||
+[link](https://www.google.com)
+- [ ] Uncompleted task list item
+- [x] Completed task list item
+> Quote
+```
+⬇️⬇️⬇️
 
-⚠️ **Поддерживаемые форматы:** .md, .markdown, .txt
+📌 Header
+**bold** *italic* ~~strikethrough~~ ||spoiler||
+[link](https://www.google.com)
+◻ Uncompleted task list item
+✔ Completed task list item
+>Quote
 """.strip()
 
     UNSUPPORTED_MESSAGE = """
