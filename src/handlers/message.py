@@ -4,8 +4,16 @@ import logging
 from aiogram import F, Router
 from aiogram.enums import ParseMode
 from aiogram.filters import Command, CommandStart
-from aiogram.types import Message, BufferedInputFile
-from telegramify_markdown import ContentTypes, Text, File, Photo, customize, markdownify, telegramify
+from aiogram.types import BufferedInputFile, Message
+from telegramify_markdown import (
+    ContentTypes,
+    File,
+    Photo,
+    Text,
+    customize,
+    markdownify,
+    telegramify,
+)
 
 from src.lexicon import Lexicon
 
@@ -17,9 +25,31 @@ customize.get_runtime_config()._strict_markdown = True
 customize.get_runtime_config()._markdown_symbol.task_uncompleted = "◻"
 customize.get_runtime_config()._markdown_symbol.task_completed = "✔"
 
+
+def _extract_full_pre_entity_text(message: Message) -> str | None:
+    """Return text if the entire message is a single PRE/CODE entity.
+
+    Uses aiogram's parsed entities which already account for UTF-16 offsets.
+    Accepts both 'pre' (multiline code block) and 'code' (inline) covering the full text.
+    """
+    if not message.text:
+        return None
+    entities = message.entities or []
+    code_entities = [e for e in entities if e.type in ("pre", "code")]
+    if len(code_entities) != 1:
+        return None
+    entity = code_entities[0]
+    extracted = entity.extract_from(message.text)
+    if entity.offset == 0 and extracted == message.text:
+        return extracted
+    return None
+
+
 @router.message(CommandStart())
 async def start_command(message: Message):
-    await message.answer(markdownify(Lexicon.START_MESSAGE), parse_mode=ParseMode.MARKDOWN_V2)
+    await message.answer(
+        markdownify(Lexicon.START_MESSAGE), parse_mode=ParseMode.MARKDOWN_V2
+    )
 
 
 @router.message(F.document)
@@ -77,9 +107,15 @@ async def document_handler(message: Message):
             if isinstance(m, Text):
                 await message.answer(m.content, parse_mode=ParseMode.MARKDOWN_V2)
             elif isinstance(m, File):
-                await message.answer_document(BufferedInputFile(m.file_data, filename=m.file_name), caption=m.caption)
+                await message.answer_document(
+                    BufferedInputFile(m.file_data, filename=m.file_name),
+                    caption=m.caption,
+                )
             elif isinstance(m, Photo):
-                await message.answer_photo(BufferedInputFile(m.file_data, filename=m.file_name), caption=m.caption)
+                await message.answer_photo(
+                    BufferedInputFile(m.file_data, filename=m.file_name),
+                    caption=m.caption,
+                )
 
         logger.info(f"Successfully processed markdown file: {document.file_name}")
 
@@ -93,9 +129,48 @@ async def document_handler(message: Message):
         )
 
 
-@router.message()
-async def unsupported_message_handler(message: Message):
-    """Handle all other messages (text, photos, etc.)"""
-    await message.answer(
-        markdownify(Lexicon.UNSUPPORTED_MESSAGE), parse_mode=ParseMode.MARKDOWN_V2
-    )
+@router.message(F.text)
+async def codeblock_text_handler(message: Message):
+    """Handle text messages that are a single code entity by processing
+    the inner content as markdown (same flow as file uploads)."""
+    inner_markdown = _extract_full_pre_entity_text(message)
+    if inner_markdown is None:
+        await message.answer(
+            markdownify(Lexicon.UNSUPPORTED_MESSAGE), parse_mode=ParseMode.MARKDOWN_V2
+        )
+        return
+
+    try:
+        messages = await telegramify(inner_markdown)
+        for m in messages:
+            if isinstance(m, Text):
+                await message.answer(m.content, parse_mode=ParseMode.MARKDOWN_V2)
+            elif isinstance(m, File):
+                await message.answer_document(
+                    BufferedInputFile(m.file_data, filename=m.file_name),
+                    caption=m.caption,
+                )
+            elif isinstance(m, Photo):
+                await message.answer_photo(
+                    BufferedInputFile(m.file_data, filename=m.file_name),
+                    caption=m.caption,
+                )
+
+        logger.info("Successfully processed markdown from code entity text message")
+
+    except Exception as e:
+        logger.error(f"Error processing code entity text: {e}")
+        await message.answer(
+            markdownify(
+                "❌ Произошла ошибка при обработке сообщения. Убедитесь, что кодовый блок содержит корректный текст в кодировке UTF-8."
+            ),
+            parse_mode=ParseMode.MARKDOWN_V2,
+        )
+
+
+# @router.message()
+# async def unsupported_message_handler(message: Message):
+#     """Handle all other messages (text, photos, etc.)"""
+#     await message.answer(
+#         markdownify(Lexicon.UNSUPPORTED_MESSAGE), parse_mode=ParseMode.MARKDOWN_V2
+#     )
